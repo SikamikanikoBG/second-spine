@@ -33,10 +33,6 @@ android {
         // The lint only has teeth if the schema is actually exported, so it is exported here.
         ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
-        // ML Kit ships ~12 MB of native pipeline per ABI. x86/x86_64 exist only for emulators, and
-        // this app is sideloaded onto real phones — shipping them cost ~48 MB of pure dead weight.
-        // arm64-v8a covers every phone since ~2015; armeabi-v7a keeps 32-bit stragglers working.
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     signingConfigs {
@@ -56,6 +52,17 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+
+            // ML Kit ships ~12 MB of native pipeline PER ABI. x86/x86_64 exist only for emulators,
+            // and this is sideloaded onto a real phone — carrying them cost ~48 MB of dead weight
+            // (155 MB -> 44 MB with R8). arm64-v8a covers every phone since ~2015; armeabi-v7a keeps
+            // 32-bit stragglers alive.
+            //
+            // Release-only, deliberately: filtering in defaultConfig also strips x86_64 from debug,
+            // which silently makes the app un-runnable in an emulator — i.e. it removes the only way
+            // to find out whether the thing launches. Size is a release concern; testability is a
+            // debug concern. Do not merge these.
+            ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         }
     }
 

@@ -7,6 +7,7 @@ import com.secondspine.coach.Habit
 import com.secondspine.coach.Stage
 import com.secondspine.coach.Tier
 import com.secondspine.coach.jurisdiction
+import com.secondspine.app.work.SecondSpineWork
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,6 +31,11 @@ class SecondSpineApp : Application() {
     override fun onCreate() {
         super.onCreate()
         AppGraph.install(this)
+        // The workers exist and are carefully reasoned (scheduleAll is idempotent, UPDATE-policy),
+        // but nothing called them — so the purge never purged, the pipeline never graduated a habit,
+        // the Tape never composed and the export never ran. The same unwired-seam class of bug that
+        // left the app with no demand: built, verified to compile, never switched on.
+        SecondSpineWork.scheduleAll(this)
     }
 }
 

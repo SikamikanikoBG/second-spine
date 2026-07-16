@@ -1,26 +1,15 @@
 package com.secondspine.app.ui
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.NavType
-import com.secondspine.app.ui.theme.BodyStyle
 import com.secondspine.app.ui.theme.Motion
-import com.secondspine.app.ui.theme.PaperFaint
-import com.secondspine.app.ui.theme.SsSectionLabel
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.material3.Text
 
 /**
  * THE NAVIGATION GRAPH.
@@ -69,35 +58,40 @@ object Routes {
 /**
  * The screens, as slots.
  *
- * Every route in SPEC §4.1 belongs to a different author, and several of them do not exist in the
- * tree yet. Rather than have this file import them directly — which makes the graph uncompilable
- * until the last screen lands, and makes every agent's build depend on every other agent's — the
- * graph takes its content as parameters and defaults each one to [PendingSurface].
+ * **Every slot is required. There are no defaults, and that is the point of this class now.**
  *
- * The routes are therefore **real now**: `navigate(Routes.TAPE)` works today, the back stack is
- * correct today, and the transitions are correct today. Each screen's author replaces exactly one
- * lambda and touches nothing else. When the last one lands, the defaults are unreachable.
+ * It used to default each slot to a `PendingSurface` placeholder, so that the graph would compile
+ * before the last screen landed. The cost of that convenience was discovered the expensive way: every
+ * screen in the app was written, every screen compiled, `:app:assembleDebug` was green, seven agents
+ * each verified their own build — and the shipped APK opened to "INTAKE — This surface is not
+ * installed in this build", because `MainActivity` never passed any of them in. The defaults made
+ * *unwired* and *done* indistinguishable from the outside, and a green CI proved nothing about
+ * whether the product was reachable.
+ *
+ * So: no defaults. A screen that is not passed in is a **compile error** in `MainActivity`, which is
+ * the only place that can be wrong about this. The next person to add a route cannot ship a grey
+ * placeholder by forgetting something; they have to look at it.
  *
  * Each slot names its owning file from SPEC §4.1's inventory.
  */
 class ScreenSlots(
     /** `ui/intake/IntakeFlow.kt` → terminal step `ui/intake/ContractScreen.kt`. */
-    val intake: @Composable (onDone: () -> Unit) -> Unit = { PendingSurface("INTAKE") },
-    /** `ui/shot/ShotScreen.kt` → `ui/shot/StampScreen.kt` / `ui/shot/AuditScreen.kt`. */
-    val proof: @Composable (habitId: String, onDone: () -> Unit) -> Unit = { _, _ -> PendingSurface("PROOF") },
+    val intake: @Composable (onDone: () -> Unit) -> Unit,
+    /** `ui/proof/ProofScreen.kt` — SHOT → STAMP. */
+    val proof: @Composable (habitId: String, onDone: () -> Unit) -> Unit,
     /** `ui/tape/TapeScreen.kt`. */
-    val tape: @Composable (onBack: () -> Unit) -> Unit = { PendingSurface("THE TAPE") },
-    /** The Ledger card, lifted out of the Tape so it is reachable on a Tuesday. `Ledger.kt` feeds it. */
-    val ledger: @Composable (onBack: () -> Unit) -> Unit = { PendingSurface("THE LEDGER") },
+    val tape: @Composable (onBack: () -> Unit) -> Unit,
+    /** The Ledger, reachable on a Tuesday rather than only on Sunday's Tape. */
+    val ledger: @Composable (onBack: () -> Unit) -> Unit,
     /** `ui/archive/ArchiveScreen.kt`. */
-    val archive: @Composable (onBack: () -> Unit) -> Unit = { PendingSurface("ARCHIVE") },
+    val archive: @Composable (onBack: () -> Unit) -> Unit,
     /** Settings, incl. STAND DOWN, MUTE THE MAN, export, and RETIRE RIP. */
-    val settings: @Composable (onBack: () -> Unit, onRetire: () -> Unit) -> Unit = { _, _ -> PendingSurface("SETTINGS") },
-    /** `ui/exit/GoodbyeScreen.kt`. */
-    val goodbye: @Composable (onBack: () -> Unit) -> Unit = { PendingSurface("GOODBYE") },
-    /** `ui/arena/ComebackScreen.kt`. One card, one button, one tiny action. */
-    val comeback: @Composable (onOneSet: () -> Unit) -> Unit = { PendingSurface("COMEBACK") },
-    /** `ui/home/HomeScreen.kt` — built here. Never a placeholder. */
+    val settings: @Composable (onBack: () -> Unit, onRetire: () -> Unit) -> Unit,
+    /** `ui/settings/GoodbyeScreen.kt`. `onRetired` fires *after* the retirement is written. */
+    val goodbye: @Composable (onBack: () -> Unit, onRetired: () -> Unit) -> Unit,
+    /** `ui/comeback/ComebackScreen.kt`. One card, one button, one tiny action. */
+    val comeback: @Composable (onOneSet: () -> Unit) -> Unit,
+    /** `ui/home/HomeScreen.kt`. Never a placeholder. */
     val home: @Composable (nav: NavHostController) -> Unit,
 )
 
@@ -167,7 +161,19 @@ fun SecondSpineNav(
             )
         }
 
-        composable(Routes.GOODBYE) { screens.goodbye { navController.popBackStack() } }
+        composable(Routes.GOODBYE) {
+            screens.goodbye(
+                { navController.popBackStack() },
+                {
+                    // He is retired. The odometer is 0, which home already knows how to render — a
+                    // 40px face, no voice, and the Archive. There is no farewell route and no "sorry
+                    // to see you go": the settings stack is cleared and he lands on the ending.
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(Routes.HOME) { inclusive = true }
+                    }
+                },
+            )
+        }
 
         composable(Routes.COMEBACK) {
             screens.comeback {
@@ -177,28 +183,6 @@ fun SecondSpineNav(
                     popUpTo(Routes.COMEBACK) { inclusive = true }
                 }
             }
-        }
-    }
-}
-
-/**
- * A route that exists before its screen does.
- *
- * Flat UI type, no character, no gold. If a surface is not installed, Rip does not get to comment on
- * it: he is a 40 MB tape ghost with opinions about your kitchen, not about the build. Putting him in
- * an error state is how a character becomes a mascot.
- */
-@Composable
-private fun PendingSurface(name: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            SsSectionLabel(name)
-            Text(
-                text = "This surface is not installed in this build.",
-                style = BodyStyle,
-                color = PaperFaint,
-                modifier = Modifier.padding(top = 8.dp),
-            )
         }
     }
 }

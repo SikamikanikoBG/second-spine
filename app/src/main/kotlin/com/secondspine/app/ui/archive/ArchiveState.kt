@@ -1,19 +1,21 @@
 package com.secondspine.app.ui.archive
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import com.secondspine.app.AppGraph
+import com.secondspine.app.data.Graph
+import com.secondspine.app.export.ExportStatus
+import com.secondspine.app.ui.ProofSource
 import com.secondspine.coach.Register
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
-import java.time.Instant
+import androidx.lifecycle.viewModelScope
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * THE ARCHIVE'S STATE.
@@ -42,8 +44,9 @@ import java.util.Locale
  *
  * @param dayLabel and [monthLabel] arrive **pre-formatted**, exactly as `LedgerEntry.note` does in
  *   `:coach`, and for the same reason: turning epoch millis into "TUE 06:41" needs a timezone and a
- *   locale, and neither the brain nor a render pass should be the thing that owns one. See
- *   [ArchiveViewModel] for the single place in this package that holds a `ZoneId`.
+ *   locale, and neither the brain nor a render pass should be the thing that owns one. `ui.ProofSource`
+ *   is the single place that holds a `ZoneId` and the single place a proof timestamp becomes words —
+ *   home's filmstrip and this grid are two readers of that one formatter, not two copies of it.
  * @param caption Rip's caption, or null. Quiet, low jurisdiction, never a judgement of the contents
  *   of the photograph — he is 94% wrong about vision and 100% accurate about what he logged, so he
  *   captions the *logging*, never the picture. Null is the common case and is not an empty state.
@@ -99,65 +102,69 @@ data class ArchiveState(
  * parameter so that the formatting is testable and so that the one place in this package that knows
  * about time zones is this line.
  *
- * The frame source is a seam, in the shape `AppGraph` already established: real when wired, honest
- * when not. It defaults to **empty**, and empty renders as "NO TAPE YET" rather than as sample
- * photographs — a fabricated archive is the one lie this screen cannot tell, because the archive
- * being *his* is the entire reason it survives to month 8.
+ * **The frame source was a seam and the seam was the bug.** It used to be a `wireFrames()` method
+ * that nothing anywhere called, defaulting to empty — so an archive with real photographs on disk and
+ * real rows in `proof` rendered "NO TAPE YET", forever, and no compile and no CI could tell the
+ * difference between "unwired" and "he has taken no photographs". That is the same failure as
+ * `wireHabits` and `Graph.install`, and it is worse here than anywhere else in the app: the archive is
+ * what is left standing at jurisdiction 0, so a permanently empty one deletes month 8 rather than
+ * degrading it.
+ *
+ * It now reads [ProofSource], which reads `proof`. The default is the real table, not empty. Empty
+ * still renders "NO TAPE YET" — but only when the table genuinely is, and a fabricated archive
+ * remains the one lie this screen cannot tell, because the archive being *his* is the entire reason
+ * it survives to month 8.
  */
-class ArchiveViewModel(
+class ArchiveViewModel @JvmOverloads constructor(
+    app: Application,
     private val zone: ZoneId = ZoneId.systemDefault(),
-) : ViewModel() {
+    /**
+     * The real table by default. A parameter rather than a hardcoded call so the formatting and the
+     * grouping stay testable against a fake, which is what the old seam was reaching for and got
+     * wrong by defaulting it to empty instead of to the truth.
+     */
+    frames: Flow<List<ProofFrame>> = ProofSource.frames(zone),
+) : AndroidViewModel(app) {
 
-    private val _frames = MutableStateFlow<List<ProofFrame>>(emptyList())
-
-    /** The data agent's wiring point: map `ProofDao.observeAll()` through [frameOf] and collect here. */
-    fun wireFrames(source: StateFlow<List<ProofFrame>>) {
-        viewModelScope.launch { source.collect { _frames.value = it } }
+    init {
+        // Idempotent, and the same defensive call `HomeViewModel` and `SettingsViewModel` make:
+        // `Graph.db` throws rather than returning null, and this ViewModel is reachable from a route.
+        Graph.install(app)
     }
+
+    /**
+     * The export receipt, live.
+     *
+     * Wired for the same reason as the frames: [ExportFooter] read a field nothing ever wrote, so the
+     * one line that proves the app does not hold the archive hostage said "NEVER EXPORTED" on a device
+     * that had exported that morning. NEVER_RUN and NO_FOLDER both map to null — no folder means
+     * nothing has left, which is the honest reading and the one `ExportStatus.health` already takes.
+     */
+    private val daysSinceExport: Flow<Int?> = ExportStatus.observe(app)
+        .map { health ->
+            when (health.state) {
+                ExportStatus.State.NEVER_RUN, ExportStatus.State.NO_FOLDER -> null
+                else -> health.daysSince
+            }
+        }
+        .catch { emit(null) }
 
     val state: StateFlow<ArchiveState> = combine(
         AppGraph.jurisdiction,
-        _frames,
-    ) { j: Int, frames: List<ProofFrame> ->
+        frames,
+        daysSinceExport,
+    ) { j: Int, rows: List<ProofFrame>, exported: Int? ->
         ArchiveState(
             jurisdiction = j,
-            months = frames
+            // `ProofDao.observeAll()` is already `capturedAtWall DESC`, and `sortedByDescending` is
+            // stable — so months land newest-first and, within a day, the query's newest-first order
+            // survives. `groupBy` preserves first-encounter key order, which is what makes the
+            // scrubber's rail read March, February, January downwards without a second sort.
+            months = rows
                 .sortedByDescending { it.epochDay }
                 .groupBy { it.monthLabel }
-                .map { (label, rows) -> ArchiveMonth(label, rows) },
+                .map { (label, frames) -> ArchiveMonth(label, frames) },
+            daysSinceExport = exported,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ArchiveState())
-
-    /**
-     * Format one row into a frame. The only place a proof timestamp becomes words.
-     *
-     * Note that nothing about the *contents* of the photograph is read here, because nothing about
-     * the contents is stored. There is no classifier output to map.
-     */
-    fun frameOf(
-        id: Long,
-        habitId: String,
-        imagePath: String,
-        capturedAtWall: Long,
-        caption: String? = null,
-    ): ProofFrame {
-        val local = Instant.ofEpochMilli(capturedAtWall).atZone(zone)
-        return ProofFrame(
-            id = id,
-            habitId = habitId,
-            imagePath = imagePath,
-            epochDay = local.toLocalDate().toEpochDay(),
-            dayLabel = DAY_FORMAT.format(local).uppercase(Locale.US),
-            monthLabel = MONTH_FORMAT.format(local).uppercase(Locale.US),
-            caption = caption,
-        )
-    }
-
-    private companion object {
-        /** "TUE 06:41". Mono, and short — the grid is 3 columns wide. */
-        val DAY_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE HH:mm", Locale.US)
-
-        /** "MARCH 2026". The scrubber's rung. */
-        val MONTH_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("LLLL yyyy", Locale.US)
-    }
 }

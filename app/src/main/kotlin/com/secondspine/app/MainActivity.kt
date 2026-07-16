@@ -5,14 +5,32 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.secondspine.app.data.Graph
 import com.secondspine.app.ui.Routes
 import com.secondspine.app.ui.ScreenSlots
 import com.secondspine.app.ui.SecondSpineNav
+import com.secondspine.app.ui.ShellViewModel
+import com.secondspine.app.ui.archive.ArchiveScreen
+import com.secondspine.app.ui.archive.ArchiveViewModel
+import com.secondspine.app.ui.comeback.ComebackScreen
+import com.secondspine.app.ui.comeback.ComebackViewModel
 import com.secondspine.app.ui.home.HomeScreen
 import com.secondspine.app.ui.home.HomeViewModel
+import com.secondspine.app.ui.intake.IntakeFlow
+import com.secondspine.app.ui.proof.ProofScreen
+import com.secondspine.app.ui.settings.GoodbyeScreen
+import com.secondspine.app.ui.settings.SettingsScreen
+import com.secondspine.app.ui.settings.SettingsViewModel
+import com.secondspine.app.ui.tape.TapeScreen
+import com.secondspine.app.ui.tape.TapeViewModel
 import com.secondspine.app.ui.theme.SecondSpineTheme
 
 /**
@@ -27,6 +45,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // THE DATA LAYER, INSTALLED. `SecondSpineApp.onCreate` calls `AppGraph.install` — the shell's
+        // in-memory seam — and never `Graph.install`, so the real Room database and DataStore were
+        // never constructed. `Graph.db` throws rather than returning null, which is why three separate
+        // ViewModels had grown their own defensive `Graph.install(app)` call with a comment saying the
+        // line belongs in a file they do not own. This is that file. The call is idempotent.
+        Graph.install(this)
         AppGraph.loadIntakeState()
 
         setContent {
@@ -34,18 +59,101 @@ class MainActivity : ComponentActivity() {
                 val intakeComplete by AppGraph.intakeComplete.collectAsStateWithLifecycle()
                 val comebackDue by AppGraph.comebackDue.collectAsStateWithLifecycle()
 
+                // Activity-scoped: FOR THE RECORD and BREAK GLASS are the two controls that must
+                // outlive the back stack, and home is not the only surface that offers them.
+                val shell: ShellViewModel = viewModel()
+
                 SecondSpineNav(
                     intakeComplete = intakeComplete,
                     comebackDue = comebackDue,
                     screens = ScreenSlots(
+                        intake = { onDone -> IntakeFlow(onDone = onDone) },
+
+                        proof = { habitId, onDone ->
+                            // `ProofScreen` owns its own `ProofViewModel` and calls `start(habitId)`
+                            // itself, including the FOR THE RECORD button on the camera.
+                            ProofScreen(habitId = habitId, onDone = onDone)
+                        },
+
+                        tape = { onBack ->
+                            val vm: TapeViewModel = viewModel()
+                            val state by vm.state.collectAsStateWithLifecycle()
+                            TapeScreen(state = state, onBack = onBack)
+                        },
+
+                        // THE LEDGER has no screen of its own — SPEC §4.1 lists the route but the
+                        // docket only ever got built as the Tape's card and home's three-glyph strip.
+                        // Routed to the Archive, which is a real surface with real rows in it, rather
+                        // than left as a placeholder that ships. Flagged in the report.
+                        ledger = { onBack -> ArchiveSurface(onBack) },
+
+                        archive = { onBack -> ArchiveSurface(onBack) },
+
+                        settings = { onBack, onRetire ->
+                            val vm: SettingsViewModel = viewModel()
+                            val state by vm.state.collectAsStateWithLifecycle()
+                            SettingsScreen(
+                                state = state,
+                                onBack = onBack,
+                                onRetire = onRetire,
+                                onSetMuted = vm::setMuted,
+                                onSetPausedMode = vm::setPausedMode,
+                                onExportNow = vm::exportNow,
+                            )
+                        },
+
+                        goodbye = { onBack, onRetired ->
+                            val vm: SettingsViewModel = viewModel()
+                            val state by vm.state.collectAsStateWithLifecycle()
+                            GoodbyeScreen(
+                                state = state,
+                                onBack = onBack,
+                                onExportNow = vm::exportNow,
+                                onConfirmRetire = { vm.retire(onRetired) },
+                            )
+                        },
+
+                        comeback = { onOneSet ->
+                            val vm: ComebackViewModel = viewModel()
+                            val state by vm.state.collectAsStateWithLifecycle()
+                            ComebackScreen(
+                                onOneSet = onOneSet,
+                                // The comeback carries BREAK GLASS on its own card, in its own state
+                                // object. Day 10 of the flu is not a day to make him go looking.
+                                state = state.copy(onBreakGlass = shell::breakGlass),
+                            )
+                        },
+
                         home = { nav ->
                             val vm: HomeViewModel = viewModel()
                             val state by vm.state.collectAsStateWithLifecycle()
+
+                            // RECOMPUTE THE DEMAND ON RESUME.
+                            //
+                            // `LocalLifecycleOwner` inside a `NavHost` destination is the
+                            // `NavBackStackEntry`, not the Activity — which is the scope that is
+                            // actually wanted here. It fires on the cold start, on every return from
+                            // the background, AND on the pop back from the camera, so the demand a
+                            // user has just answered is gone by the time he sees home again.
+                            //
+                            // A day rolls over at midnight and windows open on the hour, so the
+                            // demand must also be re-armed on a clock the back stack knows nothing
+                            // about; the ViewModel's own minute tick covers that. This is the edge
+                            // that the tick cannot see: the app was not running.
+                            val owner = LocalLifecycleOwner.current
+                            DisposableEffect(owner) {
+                                val observer = LifecycleEventObserver { _, event ->
+                                    if (event == Lifecycle.Event.ON_RESUME) vm.onResume()
+                                }
+                                owner.lifecycle.addObserver(observer)
+                                onDispose { owner.lifecycle.removeObserver(observer) }
+                            }
+
                             HomeScreen(
                                 state = state,
                                 onProof = { habitId -> nav.navigate(Routes.proof(habitId)) },
-                                onForTheRecord = { /* wired by the confession agent */ },
-                                onBreakGlass = { /* wired by the safety agent */ },
+                                onForTheRecord = { shell.forTheRecord(state.demand?.habitId) },
+                                onBreakGlass = shell::breakGlass,
                                 onOpenTape = { nav.navigate(Routes.TAPE) },
                                 onOpenLedger = { nav.navigate(Routes.LEDGER) },
                                 onOpenArchive = { nav.navigate(Routes.ARCHIVE) },
@@ -88,6 +196,20 @@ class MainActivity : ComponentActivity() {
         intent?.removeExtra(EXTRA_OPEN_SOURCE)
         return raw?.let { name -> runCatching { AppOpenSource.valueOf(name) }.getOrNull() }
             ?: AppOpenSource.LAUNCHER
+    }
+
+    /**
+     * The Archive, as both `archive` and `ledger` reach it.
+     *
+     * Each route composes its own `ArchiveViewModel` because `viewModel()` here resolves against the
+     * calling destination's `NavBackStackEntry`, which is the correct scope: the grid's scroll
+     * position belongs to the entry the user pushed, not to the Activity.
+     */
+    @Composable
+    private fun ArchiveSurface(onBack: () -> Unit) {
+        val vm: ArchiveViewModel = viewModel()
+        val state by vm.state.collectAsStateWithLifecycle()
+        ArchiveScreen(state = state, onBack = onBack)
     }
 
     companion object {

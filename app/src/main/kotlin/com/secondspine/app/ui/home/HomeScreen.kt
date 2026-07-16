@@ -36,7 +36,7 @@ import com.secondspine.app.ui.theme.Gold
 import com.secondspine.app.ui.theme.Hairline
 import com.secondspine.app.ui.theme.Ink
 import com.secondspine.app.ui.theme.InkRaised
-import com.secondspine.app.ui.theme.InkSunken
+import com.secondspine.app.ui.archive.ProofImage
 import com.secondspine.app.ui.theme.LabelStyle
 import com.secondspine.app.ui.theme.LedgerCounter
 import com.secondspine.app.ui.theme.MonoCaptionStyle
@@ -368,9 +368,26 @@ private fun ArchiveBand(state: HomeState, onOpenArchive: () -> Unit) {
                                 .weight(1f)
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(InkSunken)
-                                .vhsTracking(TapeWear.Worn, seed = thumb.id.hashCode().toFloat() % 1f),
-                        )
+                                // Seeded off the row id, as the Archive's own cells are, so no two
+                                // frames tear in lockstep. The old seed was `id.hashCode() % 1f`,
+                                // which is zero for every frame on earth — the difference between
+                                // "a strip of worn tape" and "the strip is glitching".
+                                .vhsTracking(TapeWear.Worn, seed = (thumb.id % 100) / 100f),
+                        ) {
+                            // THE ACTUAL PHOTOGRAPH. `InkSunken` is the undecoded state and lives
+                            // inside `ProofImage`; it used to be the *only* state, because the type
+                            // carried no path to decode. A grey rectangle where his kitchen at 6am
+                            // should be is the strip advertising the archive instead of being it.
+                            ProofImage(
+                                path = thumb.imagePath,
+                                // Never describes the contents. The app does not know what is in it.
+                                contentDescription = "Proof, ${thumb.dayLabel}",
+                                modifier = Modifier.fillMaxSize(),
+                                // The strip is ~103dp at its tallest. 160px is one more halving of
+                                // the sensor JPEG than the grid needs and keeps the 7am decode cheap.
+                                targetPx = 160,
+                            )
+                        }
                         Spacer(Modifier.height(4.dp))
                         Text(thumb.dayLabel, style = MonoCaptionStyle, color = PaperFaint)
                     }
