@@ -16,3 +16,4 @@ keystore.properties
 # Wrapper jar must be committed
 !gradle/wrapper/gradle-wrapper.jar
 design/
+.kotlin/
