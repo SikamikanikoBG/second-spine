@@ -127,21 +127,27 @@ data class IntakeState(
  */
 class IntakeViewModel(app: Application) : AndroidViewModel(app) {
 
-    init {
-        // Idempotent (`Graph.install` returns early if the database exists) and defensive: the intake
-        // is the first destination on a fresh install and must not depend on somebody else's
-        // Application.onCreate having reached the data layer first.
-        Graph.install(app)
-        wireGatesOnce()
-        observeHabits()
-        observeGates()
-    }
-
     private val settings get() = Graph.settings
     private val habitDao get() = Graph.db.habitDao()
 
     private val _state = MutableStateFlow(IntakeState())
     val state: StateFlow<IntakeState> = _state.asStateFlow()
+
+    init {
+        // Idempotent (`Graph.install` returns early if the database exists) and defensive: the intake
+        // is the first destination on a fresh install and must not depend on somebody else's
+        // Application.onCreate having reached the data layer first.
+        //
+        // THIS BLOCK MUST STAY BELOW `_state`. `observeHabits()`/`observeGates()` launch collectors on
+        // Room flows that write `_state.value` on their first emission, and Kotlin runs initializers
+        // in declaration order — so an init placed above `_state` can have Room win the race and emit
+        // into a still-null `_state`, an NPE that crashes ~1 in 2 cold starts (intermittently, which
+        // is worse: it ships looking fine). Declaring the field first closes the race.
+        Graph.install(app)
+        wireGatesOnce()
+        observeHabits()
+        observeGates()
+    }
 
     // ── The desk ────────────────────────────────────────────────────────────
 
