@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        THE PLATFORM THEME.
+
+        This exists for the ~200ms before Compose has a frame, and those 200ms are the whole reason
+        it is worth writing carefully: a white flash on cold start would be the first thing the user
+        ever sees of an app whose entire identity is a dark room and a degraded tape. Every window
+        background here is `@color/ink` so that the launch is black-to-black and the app appears to
+        have simply *been there*.
+
+        `Theme.Material3.Dark.NoActionBar` and not DayNight: dark only, and it is not a preference
+        (see `ui/theme/Theme.kt`). A tape does not have a light mode.
+    -->
+    <style name="Theme.SecondSpine" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@color/ink</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <!-- Nothing fades, including the window. SPEC §4.9. -->
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+
+    <!--
+        THE LOCK'S THEME. (LockActivity is implemented by the escalation agent; its window is
+        specified here because the window is the rung.)
+
+        No title, no action bar, opaque, and translucency explicitly off — a translucent lock is a
+        lock you can see your way around, and the 400ms boomerang is only credible if the screen is
+        actually the screen. It is still an unconditional 90-second self-expiry regardless of proof,
+        because the impotence is canon: he is forty megabytes and a dream, and he says so.
+    -->
+    <style name="Theme.SecondSpine.Lock" parent="Theme.SecondSpine">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowShowWallpaper">false</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+
+</resources>

@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        NO NETWORK. THIS IS THE ONE THE README STAKES ITS NAME ON, SO IT IS ENFORCED HERE.
+
+        The README claims "on-device, no account, no cloud, no network". That claim was FALSE the
+        first time this APK was built: the manifest merger silently pulled INTERNET in from
+        `com.google.mlkit:vision-internal-vkp` and from `transport-backend-cct` — Google's telemetry
+        uploader. An app that photographs a man's kitchen and his books does not ship an analytics
+        transport, and a privacy claim you have not read the merged manifest to check is a wish.
+
+        The bundled ML Kit models are on-disk and run offline; they do not need the network. So the
+        permission is removed outright rather than merely unused. Now the claim is verifiable with
+        `aapt dump badging` by anyone who doubts it — which is the only kind of privacy claim worth
+        printing.
+
+        If a future change needs the network, it does not get to quietly re-merge this: the merger
+        will fail, someone will have to delete these lines on purpose, and the README will be a lie
+        in the same commit that makes it one.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" tools:node="remove" />
+
+    <!--
+        THE PERMISSION SET, and the argument for each.
+
+        This is the most aggressive manifest in a health app, and every line of it is either the
+        product or the safety floor. The escalation ladder is the product; a ladder that Doze can
+        silence is a comedy app that occasionally beeps. So: exact alarms, full-screen intents, an
+        overlay, a foreground service. Rip is told to ask for each of them in his own voice, one line
+        before the system dialog fires (SPEC §4.8): "Next box says 'draw over other apps.' That's the
+        box where I get to ruin your Tuesday. Tick it."
+    -->
+
+    <!-- R0: the notification rung. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!--
+        R2/R4: the alarm and the lock must fire at a time the user cannot predict.
+        SPEC §4.9 / the decoy design: `setAlarmClock` leaks the fire time through
+        `getNextAlarmClock()`, which defeats the unpredictability that carries all of the deterrence.
+        So these are exact alarms that are deliberately NOT alarm-clock alarms.
+    -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!-- R4: the lock, over the keyguard. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!--
+        THE ONLY EYE HE HAS. Camera is the whole thesis: logging can be faked, a photograph of your
+        actual kitchen at 06:41 cannot.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!--
+        DELIBERATELY ABSENT: READ_MEDIA_IMAGES / READ_EXTERNAL_STORAGE.
+
+        This is load-bearing and it is not an oversight. The capture path is CameraX, in-process, with
+        no gallery picker and no ACTION_IMAGE_CAPTURE. Gallery import must be *impossible*, not
+        merely discouraged — and the way you make it impossible is to not hold the permission, so
+        that no future screen, no library, and nobody at 1am can quietly add a "pick from gallery"
+        affordance without this file changing in a code review.
+
+        It is also what makes RESOLUTIONS §A2 true: BYTE_REPLAY is near-unreachable precisely because
+        a real sensor cannot emit two byte-identical frames and there is no other way in. Without
+        this absence, the app's one live accusation would start firing on honest nights.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <!-- The ladder must survive a reboot. A challenge that a restart voids is a challenge with a
+         one-tap cheat code on it. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!--
+        THE SAFETY INTERLOCK, not a surveillance feature.
+
+        RESOLUTIONS §D: "Never lock over the dialer" is a mandatory guardrail with no implementation,
+        because call detection only catches an *active* call — it does not catch a man typing 112.
+        The gate is on the foreground package, and reading the foreground package needs this. It is
+        held so the app can refuse to act, never so it can act.
+    -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- Resolving the dialer and navigation packages the interlocks refuse to fire over. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
+
+    <uses-feature android:name="android.hardware.camera.any" android:required="true" />
+
+    <application
+        android:name=".SecondSpineApp"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.SecondSpine"
+        android:enableOnBackInvokedCallback="true"
+        android:hardwareAccelerated="true"
+        android:largeHeap="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:allowBackup="false">
+
+        <!--
+            allowBackup=false, and it is a promise rather than a precaution.
+
+            The archive is app-private and SQLCipher-encrypted, and the entire pitch to the user is
+            "they stay on your phone, encrypted; not in your gallery, not in anyone's cloud". Android
+            Auto Backup would put a copy of the whole thing in Google Drive on a schedule the user
+            never agreed to and cannot see. The export is a weekly SAF write the user owns, and it is
+            the *only* copy that leaves. The app must never hold the archive hostage; it must also
+            never hand it to a third party to prove it isn't.
+        -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
+            android:theme="@style/Theme.SecondSpine">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            THE LOCK. (Implemented by the escalation agent; declared here.)
+
+            Every attribute is doing work:
+              - singleInstance + its own task affinity: it must not join MainActivity's stack. The
+                lock has to survive the app being force-stopped and has to be dismissable without
+                dragging the whole app down with it.
+              - showWhenLocked + turnScreenOn: R4 fires over the keyguard or it is not a rung.
+              - excludeFromRecents: the lock is not a place you can navigate back to. It expires
+                unconditionally at 90 seconds regardless of proof, and a recents entry would be a
+                fourth way for a dead challenge to come back to life.
+              - noHistory=false: the 400ms boomerang is the design (SPEC §4.7 — he says so out loud:
+                "I'll be back in four hundred milliseconds because I'm forty megabytes and a dream").
+              - It is NOT exported. Nothing outside this app may ever start it.
+        -->
+        <activity
+            android:name=".ui.lock.LockActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:taskAffinity="com.secondspine.app.lock"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:showOnLockScreen="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode|density"
+            android:theme="@style/Theme.SecondSpine.Lock"
+            tools:ignore="UnusedAttribute" />
+
+    </application>
+
+</manifest>

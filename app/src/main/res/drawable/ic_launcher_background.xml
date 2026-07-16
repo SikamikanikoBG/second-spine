@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Near-black, not black. #0B0C0E reads as a dark room; #000 reads as a hole in the launcher and
+    disappears entirely on an OLED home screen with a dark wallpaper — which is most of them.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z" android:fillColor="#0B0C0E" />
+</vector>

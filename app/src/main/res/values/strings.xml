@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+        SPEC §4.9 ships a `NoEmojiInUi` lint over string resources. There is nothing for it to find
+        here and there never will be: an emoji is a third party's illustration of a feeling, rendered
+        differently on every device, and one of them anywhere in this UI retracts the claim that a
+        real coach built this. The icon set in `ui/theme/Icons.kt` is hand-built at 2px for exactly
+        this reason.
+    -->
+
+    <string name="app_name">Second Spine</string>
+
+    <!--
+        The notification channels. Named flat, in the app's voice and not in Rip's, because these
+        strings appear in Android Settings — a surface the character does not own and must not
+        perform on. A user hunting for the toggle that silences a 3am alarm should find a plain noun,
+        not a bit.
+    -->
+    <string name="channel_demand_name">Demands</string>
+    <string name="channel_demand_desc">The one thing being asked of you today.</string>
+    <string name="channel_ladder_name">Escalation</string>
+    <string name="channel_ladder_desc">Reminders that get louder when a demand goes unanswered.</string>
+    <string name="channel_tape_name">The Tape</string>
+    <string name="channel_tape_desc">The weekly report, Sunday evening.</string>
+
+    <!--
+        THE ONE BREAK, and the reason it is a string resource rather than a fragment in the bank.
+        Nothing in `Fragments.kt` may reach it, nothing may randomise it, and no register may deliver
+        it. It is the app talking, in UI type, flat, once (SPEC §4.8).
+    -->
+    <string name="safety_break_glass">Emergency exit, bottom left of everything I ever do. First tap. Instant. No confirmation. Unlimited. I will never mention it — not in the moment, not on Sunday, not ever. It isn\'t counted and it isn\'t scored.</string>
+    <string name="safety_not_treatment">I\'m a comedy app. I am not treatment.</string>
+    <string name="safety_retire">RETIRE RIP is in the menu. It\'s there now. It works now.</string>
+
+    <string name="action_break_glass">BREAK GLASS</string>
+    <string name="action_for_the_record">FOR THE RECORD</string>
+    <string name="action_stand_down">STAND DOWN</string>
+    <string name="action_mute">MUTE THE MAN</string>
+
+</resources>

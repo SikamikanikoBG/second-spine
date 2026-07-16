@@ -1,0 +1,11 @@
+# Without `gradlew text eol=lf` the CI runner dies with `bad interpreter: ^M`
+# when a Windows checkout CRLFs the wrapper script. Learned on Sonora.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.jar binary
+*.tflite binary
+*.task binary
+*.traineddata binary
+*.wav binary
+*.ogg binary
+gradlew text eol=lf

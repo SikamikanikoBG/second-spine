@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    NOTHING LEAVES. Not to cloud backup, not to a new device.
+
+    `allowBackup="false"` in the manifest already refuses Auto Backup, and this file refuses the two
+    Android 12+ transports that are configured separately from it. All three exist because the app
+    told the user, in fifteen words, before the first shutter: "This app takes photos. They stay on
+    your phone, encrypted. You can export or delete them anytime."
+
+    The weekly SAF export is the only copy that ever leaves the device, and the user chooses where it
+    lands. That is not a privacy nicety — it is the graft that keeps the app from holding the archive
+    hostage. An app that can be uninstalled without losing ~1,400 photographs of your own life is an
+    app you can leave, and precommitment is only ethical while the exit is free.
+
+    Device transfer is refused for the same reason cloud backup is: an encrypted archive silently
+    materialising on a new phone is a copy the user did not make.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

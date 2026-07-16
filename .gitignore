@@ -1,0 +1,18 @@
+*.iml
+.gradle/
+local.properties
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild
+.cxx
+# Key material — never commit
+*.keystore
+*.jks
+keystore.properties
+*.apk
+*.aab
+# Wrapper jar must be committed
+!gradle/wrapper/gradle-wrapper.jar
+design/

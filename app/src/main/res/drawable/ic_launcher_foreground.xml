@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    THE LAUNCHER ICON. A lens, at 2px stroke, in gold on near-black.
+
+    It is the eye he does not have, which is the only honest thing to put on the icon: he is a
+    washed-up infomercial ghost with no arms and no eyes except your phone camera, and the icon is
+    therefore a picture of the *user's* camera rather than a picture of a man. No face, no dumbbell,
+    no flexing arm, no leaf, no ring closing. Every one of those is the icon of an app already on the
+    home screen and already ignored, and the home screen is where the "is this the fourteenth
+    wellness app" verdict is actually returned — before a single word of Rip's gets a chance to work.
+
+    Adaptive-icon safe zone is the centre 66dp of 108dp, so everything here stays inside r=33.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- The barrel. -->
+    <path
+        android:pathData="M54,26 A28,28 0 1,1 53.99,26 Z"
+        android:strokeColor="#FFB300"
+        android:strokeWidth="4"
+        android:strokeLineCap="round" />
+
+    <!-- The aperture. -->
+    <path
+        android:pathData="M54,41 A13,13 0 1,1 53.99,41 Z"
+        android:strokeColor="#FFB300"
+        android:strokeWidth="4"
+        android:strokeLineCap="round" />
+
+    <!-- Three blades. Not decoration: they are what stops the two circles reading as a smiley. -->
+    <path
+        android:pathData="M54,26 L54,41"
+        android:strokeColor="#FFB300"
+        android:strokeWidth="4"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M78.2,68 L65.3,60.5"
+        android:strokeColor="#FFB300"
+        android:strokeWidth="4"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M29.8,68 L42.7,60.5"
+        android:strokeColor="#FFB300"
+        android:strokeWidth="4"
+        android:strokeLineCap="round" />
+
+    <!-- Two scanlines through the barrel. The tape, at 22px. -->
+    <path
+        android:pathData="M28,48 L80,48"
+        android:strokeColor="#FFB300"
+        android:strokeAlpha="0.35"
+        android:strokeWidth="2" />
+    <path
+        android:pathData="M28,60 L80,60"
+        android:strokeColor="#FFB300"
+        android:strokeAlpha="0.35"
+        android:strokeWidth="2" />
+
+</vector>

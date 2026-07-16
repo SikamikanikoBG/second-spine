@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+        The only colours the *platform* layer ever needs — the window background before Compose has a
+        frame, and the launcher icon. The real palette lives in `ui/theme/Color.kt`, where it is
+        enumerable and where `assertNoGreen()` can execute against it. Duplicating the full palette
+        into XML would create a second source of truth that no assertion can reach, and the one hard
+        rule in this product would eventually ship broken through the copy nobody checked.
+
+        These four are kept in sync by hand and by hand only because they are four.
+    -->
+    <color name="ink">#FF0B0C0E</color>
+    <color name="ink_sunken">#FF060708</color>
+    <color name="gold">#FFFFB300</color>
+    <color name="paper">#FFF2F1ED</color>
+
+</resources>
