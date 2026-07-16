@@ -133,3 +133,33 @@ Also improved on Sonora: `versionCode`/`versionName` now read from Gradle proper
 them from the git tag instead of Sonora's hand-edited literals that desync from the tag.
 
 ---
+
+## SHIPPED — v0.1.0
+
+Repo: **github.com/SikamikanikoBG/second-spine** (public). Release v0.1.0, signed APK attached, CI green.
+
+**The lesson of the build:** seven parallel agents each verified `assembleDebug` succeeds. None verified
+the app *runs*. It compiled, signed, passed CI, installed — and launched to *"This surface is not
+installed in this build."* An emulator found in four seconds what CI could not. Then a cascade of
+built-but-never-switched-on seams: the Room DB was never installed; the odometer read a hardcoded
+fiction; the app never asked for anything (no DemandResolver, and nothing wrote the *day* row —
+bankProof/confess wrote answers, nothing wrote the question); the archive showed "NO TAPE YET" over real
+photos; the WorkManager jobs were defined but never scheduled. Each invisible to a green build. The fix
+that mattered most was structural: deleting the PendingSurface defaults so an unwired screen is now a
+compile error, not a silent grey screen.
+
+Two things caught that would have embarrassed him publicly:
+- The APK requested INTERNET + a Google telemetry transport (merged in from ML Kit), contradicting the
+  README's "no network" claim. Removed outright; a CI gate now fails the build if any network permission
+  returns.
+- 155 MB -> 45 MB (R8 + dropping emulator-only ABIs from release, kept in debug so it still runs in an
+  emulator).
+
+Verified end-to-end on Android 14, on the PUBLISHED R8-minified release APK (not just a debug build):
+fresh install -> cold open -> walk the intake -> home raises a real demand -> tap -> camera -> capture
+-> Rip reacts -> proof banks -> archive shows the frame. Zero crashes. 324 brain tests green.
+
+Signing gotchas for the record: PKCS12 (JDK 9+ default) CANNOT hold a separate key password — keytool
+silently ignores -keypass, so store password and key password must be identical or CI signing dies with
+"Given final block not properly padded". keytool's flag is -alias not -keyalias (Sonora doc was wrong).
+Keys at R:\second-spine-upload.jks + R:\second-spine-KEYS.txt, outside the repo.
