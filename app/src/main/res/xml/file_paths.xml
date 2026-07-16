@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The only path the FileProvider exposes: cacheDir/updates, where the downloaded APK is written.
+    Nothing else in the app is reachable through this provider — not the archive, not the databases,
+    not the export folder.
+-->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>

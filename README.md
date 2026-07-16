@@ -4,7 +4,7 @@
 
 **A health coach that doesn't believe you.**
 
-*On-device. No account, no cloud, no network.*
+*On-device. No account, no cloud, no telemetry. The only network use is checking GitHub for app updates.*
 
 </div>
 
@@ -103,6 +103,11 @@ screen in onboarding permanently gates the entire scale feature set, with no in-
 
 Your photos are yours. The app exports them plus a readable manifest to a folder you choose, weekly,
 whether the app likes it or not. It fails loudly if it hasn't exported in fourteen days.
+
+There is one network use, and it is narrow: the app checks the public GitHub Releases feed for a
+newer version and, if you tap **Update**, downloads that APK and hands it to Android's installer. No
+account, no cloud, no telemetry, no analytics — your photos and your encrypted archive never leave
+the device. The only bytes that cross the network are a release check and an update you asked for.
 
 > If the app only retains you because leaving destroys the archive, it wasn't a product. It was a
 > lock. Ship the export and find out.

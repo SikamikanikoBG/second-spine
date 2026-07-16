@@ -107,21 +107,21 @@ jobs:
           -PversionName=${{ steps.version.outputs.name }}
           -PversionCode=${{ steps.version.outputs.code }}
 
-      # The README's headline claim is "on-device, no account, no cloud, no network". That claim was
-      # FALSE on the first build: the manifest merger pulled INTERNET in from ML Kit and from
-      # transport-backend-cct (Google's telemetry uploader). It is removed in AndroidManifest.xml —
-      # this gate is what stops a future dependency from quietly merging it back and making the
-      # README a lie. A privacy promise nothing enforces is a wish.
-      - name: No network permission (the README stakes its name on this)
+      # INTERNET is now intentional — and ONLY for the in-app updater (checking GitHub for a newer
+      # release and downloading the APK the user taps to install). So this gate no longer forbids
+      # INTERNET; it forbids everything else that would turn "no telemetry" into a lie. ML Kit's
+      # uploader and transport-backend-cct (Google's telemetry transport) stay out, and
+      # ACCESS_NETWORK_STATE stays out — a dependency that re-merges either still fails the build.
+      - name: Only INTERNET, and only for updates
         run: |
           AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
           PERMS=$("$AAPT" dump badging app/build/outputs/apk/release/app-release.apk | grep uses-permission || true)
           echo "$PERMS"
-          if echo "$PERMS" | grep -qE "android.permission.(INTERNET|ACCESS_NETWORK_STATE)"; then
-            echo "::error::APK requests a network permission. Either remove it, or the README is lying."
+          if echo "$PERMS" | grep -qE "android.permission.ACCESS_NETWORK_STATE"; then
+            echo "::error::APK requests ACCESS_NETWORK_STATE. The updater does not need it; this smells like telemetry."
             exit 1
           fi
-          echo "OK: no INTERNET, no ACCESS_NETWORK_STATE."
+          echo "OK: no ACCESS_NETWORK_STATE. INTERNET is permitted solely for the in-app updater."
 
       # The clinical guardrail that is enforced by an absence rather than a flag: there is no
       # is_healthy/calorie/macro column in the schema. A flag can be unwritten at 1am; a column that

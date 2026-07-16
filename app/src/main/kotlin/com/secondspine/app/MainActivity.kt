@@ -10,6 +10,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +44,8 @@ import com.secondspine.app.ui.settings.SettingsViewModel
 import com.secondspine.app.ui.tape.TapeScreen
 import com.secondspine.app.ui.tape.TapeViewModel
 import com.secondspine.app.ui.theme.SecondSpineTheme
+import com.secondspine.app.update.UpdateViewModel
+import com.secondspine.app.update.UpdateViewModel.UpdateUiState
 
 /**
  * THE ONE ACTIVITY. (SPEC §4.1: a single `MainActivity` + `LockActivity`. Nothing else.)
@@ -78,6 +84,12 @@ class MainActivity : ComponentActivity() {
                 // Activity-scoped: FOR THE RECORD and BREAK GLASS are the two controls that must
                 // outlive the back stack, and home is not the only surface that offers them.
                 val shell: ShellViewModel = viewModel()
+
+                // THE UPDATER, as an overlay. Checks GitHub once on launch and raises a small dialog
+                // only when a newer release exists. It renders alongside the nav graph, never in
+                // place of it — the app is fully usable whether or not an update is pending.
+                val update: UpdateViewModel = viewModel()
+                UpdatePrompt(update)
 
                 SecondSpineNav(
                     intakeComplete = intakeComplete,
@@ -250,6 +262,48 @@ class MainActivity : ComponentActivity() {
                 context, Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
             if (!granted) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    /**
+     * The update overlay: a small Material3 dialog, shown only when a newer release is available or
+     * a download is in flight. Copy is dry and short on purpose — Rip does not get to pitch here.
+     * "Later" dismisses for the process; the confirm button downloads then hands off to the system
+     * installer. During the download the confirm button is replaced by a spinner and cannot re-fire.
+     */
+    @Composable
+    private fun UpdatePrompt(vm: UpdateViewModel) {
+        val state by vm.state.collectAsStateWithLifecycle()
+        when (val s = state) {
+            is UpdateUiState.Available -> AlertDialog(
+                onDismissRequest = vm::dismiss,
+                title = { Text("Update ready") },
+                text = { Text("Version ${s.version}. Install now?") },
+                confirmButton = {
+                    TextButton(onClick = vm::startUpdate) { Text("Update") }
+                },
+                dismissButton = {
+                    TextButton(onClick = vm::dismiss) { Text("Later") }
+                },
+            )
+
+            is UpdateUiState.Downloading -> AlertDialog(
+                onDismissRequest = { /* not dismissable mid-download */ },
+                title = { Text("Downloading") },
+                text = { CircularProgressIndicator() },
+                confirmButton = {},
+            )
+
+            is UpdateUiState.Error -> AlertDialog(
+                onDismissRequest = vm::dismiss,
+                title = { Text("Update failed") },
+                text = { Text(s.message) },
+                confirmButton = {
+                    TextButton(onClick = vm::dismiss) { Text("OK") }
+                },
+            )
+
+            UpdateUiState.Idle, UpdateUiState.Checking -> Unit
         }
     }
 
