@@ -374,6 +374,23 @@ class IntakeViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun finish() {
         settings.setWizardComplete(true)
         AppGraph.markIntakeComplete()
+
+        val app = getApplication<Application>()
+
+        // Mirror his times into the boot-safe store NOW, so the wind-down window the interlocks are
+        // keyed on is his and not the hardcoded 22:30/07:00 fallback — including on the Direct Boot
+        // path, and including for the very first challenge armed below. Nothing else wrote this.
+        com.secondspine.app.enforce.Enforcement.syncBootState(
+            context = app,
+            installAt = settings.installAt.first(),
+            winddownAtMinutes = settings.winddownAtMinutes.first(),
+            wakeAtMinutes = settings.wakeAtMinutes.first(),
+        )
+
+        // ARM THE FIRST REMINDER. The doc on the step machine says "the intake ends... and the first
+        // real demand fires" — but nothing fired it. This is the line that makes that sentence true:
+        // the moment the wizard closes, today's ladder is armed for the habits he just picked.
+        com.secondspine.app.enforce.ChallengePlanner.planToday(app)
     }
 
     private companion object {

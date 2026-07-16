@@ -117,6 +117,17 @@ class ShellViewModel(app: Application) : AndroidViewModel(app) {
                         initialValue = AppGraph.habits.value,
                     )
                 )
+                // The comeback trigger. `AppGraph.comebackDue` gates the start destination in `Nav.kt`
+                // and nothing computed it, so the forgiveness screen was unreachable. Wired here, next
+                // to the odometer, from the same one-call seam its own doc names. Eager + false initial:
+                // a fresh install is not "back", it has not left.
+                AppGraph.wireComebackDue(
+                    Graph.repository.observeComebackDue().stateIn(
+                        scope = Graph.appScope,
+                        started = SharingStarted.Eagerly,
+                        initialValue = false,
+                    )
+                )
             }
         }
     }

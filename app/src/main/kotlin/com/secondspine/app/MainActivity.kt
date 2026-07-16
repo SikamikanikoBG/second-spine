@@ -1,13 +1,21 @@
 package com.secondspine.app
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -58,6 +66,14 @@ class MainActivity : ComponentActivity() {
             SecondSpineTheme {
                 val intakeComplete by AppGraph.intakeComplete.collectAsStateWithLifecycle()
                 val comebackDue by AppGraph.comebackDue.collectAsStateWithLifecycle()
+
+                // THE NOTIFICATION PERMISSION, asked once the contract is signed. On Android 13+ the
+                // R0 rung — the whole quiet end of the ladder — is a `notify()` call that silently
+                // does nothing until this is granted, and nothing anywhere requested it (the only
+                // runtime request in the app was CAMERA). So the coach's first and gentlest way to
+                // reach the user was dead on every modern phone. Asked after intake, not during, so it
+                // does not interrupt the pitch.
+                RequestNotificationsWhen(intakeComplete)
 
                 // Activity-scoped: FOR THE RECORD and BREAK GLASS are the two controls that must
                 // outlive the back stack, and home is not the only surface that offers them.
@@ -210,6 +226,31 @@ class MainActivity : ComponentActivity() {
         val vm: ArchiveViewModel = viewModel()
         val state by vm.state.collectAsStateWithLifecycle()
         ArchiveScreen(state = state, onBack = onBack)
+    }
+
+    /**
+     * Ask for POST_NOTIFICATIONS exactly once, and only after [enabled] (intake complete).
+     *
+     * Below API 33 the permission does not exist and notifications work without it, so this is a
+     * no-op there. The result is ignored on purpose: a refusal is an answer, the app degrades
+     * honestly (WorkNotifications swallows the SecurityException), and re-prompting on every launch is
+     * the behaviour that gets an app muted. `LaunchedEffect(enabled)` fires the request a single time
+     * per process once the gate opens.
+     */
+    @Composable
+    private fun RequestNotificationsWhen(enabled: Boolean) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val context = LocalContext.current
+        val launcher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission(),
+        ) { /* granted or not, the ladder degrades honestly either way */ }
+        LaunchedEffect(enabled) {
+            if (!enabled) return@LaunchedEffect
+            val granted = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     companion object {

@@ -15,6 +15,8 @@ import com.secondspine.coach.Register
 import com.secondspine.coach.Stage
 import com.secondspine.coach.jurisdiction
 import com.secondspine.coach.jurisdictionShare
+import com.secondspine.coach.ledgerRows
+import com.secondspine.app.export.ExportStatus
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -182,6 +184,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun onResume() {
         viewModelScope.launch {
             DemandSource.ensureTodayScheduled()
+            // ARM THE LADDER for today. Opening the app is the cheapest reliable moment to make sure a
+            // reminder is scheduled — idempotent per (habit, day), so this never double-arms alongside
+            // the daily `PlannerWorker` or the arm at intake completion. Without a call to the planner
+            // *somewhere*, `Enforcement.arm` has no caller and the app never nags.
+            com.secondspine.app.enforce.ChallengePlanner.planToday(getApplication())
             pulse.value = System.currentTimeMillis()
         }
     }
@@ -208,7 +215,36 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
         .catch { emit(emptyList()) }
 
-    val state: StateFlow<HomeState> = combine(
+    /**
+     * THE THREE-GLYPH DOCKET, live. Same source the Tape reads: `observeLedger` → `ledgerRows`.
+     *
+     * `HomeViewModel` never wrote this field, so `LedgerStrip` rendered its "0 CAUGHT / 0 EVASION /
+     * 0 DEMOTION" zero-state permanently — a placeholder over real rows, the same unwired-seam class
+     * as the archive filmstrip. 28 days and nothing older is the query's own window, not this file's.
+     */
+    private val ledger: Flow<List<LedgerRow>> = Graph.repository.observeLedger()
+        .map { ledgerRows(it) }
+        .catch { emit(emptyList()) }
+
+    /**
+     * The export receipt, on home too — not only in the Archive.
+     *
+     * `daysSinceExport = null` is rendered by `ExportFooter` as a loud red "LAST EXPORT: NEVER ·
+     * EXPORT IS BROKEN". Because nothing wrote this field, home showed that alarm on a device that had
+     * exported that morning — the app accusing its own plumbing of a failure that had not happened.
+     * NEVER_RUN and NO_FOLDER map to null (nothing has genuinely left yet); everything else is the
+     * real day count. Copied from `ArchiveViewModel`, which already reads it correctly.
+     */
+    private val daysSinceExport: Flow<Int?> = ExportStatus.observe(getApplication())
+        .map { health ->
+            when (health.state) {
+                ExportStatus.State.NEVER_RUN, ExportStatus.State.NO_FOLDER -> null
+                else -> health.daysSince
+            }
+        }
+        .catch { emit(null) }
+
+    private val base: Flow<HomeState> = combine(
         AppGraph.habits,
         AppGraph.gates,
         dayChanges,
@@ -226,6 +262,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
             ladder = habits.map { LadderRow(it.id, it.stage) },
             recentProofs = proofs,
         ).also { quietReasons = quiet }
+    }
+
+    val state: StateFlow<HomeState> = combine(
+        base,
+        ledger,
+        daysSinceExport,
+    ) { s: HomeState, ledgerRows: List<LedgerRow>, exported: Int? ->
+        s.copy(ledger = ledgerRows, daysSinceExport = exported)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeState())
 
     private companion object {

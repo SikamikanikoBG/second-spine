@@ -223,6 +223,30 @@ class CoachRepository(
         db.ledgerDao().observeSurviving(now).map { rows -> purge(rows.map { it.toBrain() }, now) }
 
     /**
+     * THE COMEBACK TRIGGER — `daysSinceLastProof >= 4`. SPEC §4.6, and it is the whole input to the
+     * "most important surface in the app".
+     *
+     * Nothing computed this, so `AppGraph.comebackDue` was frozen `false` and the forgiveness screen
+     * — the one that keeps three bad weeks from becoming an uninstall — was permanently unreachable.
+     * A returning user landed on a demand card instead, which is the exact churn event that screen
+     * exists to prevent.
+     *
+     * The guard that matters is `maxOfOrNull ?: return false`: a fresh install has **zero** proofs,
+     * and without this it would read "infinitely many dark days" and route a brand-new user straight
+     * into a screen that says "welcome back". No proofs means the clock has not started, not that it
+     * ran out. The number `4` never reaches the screen — only this boolean does (the screen is
+     * forbidden a `daysMissed` field on purpose).
+     *
+     * The time is read at collection through `now()`, so the four dark days elapse on the wall clock
+     * while the app is closed and are true the instant it is reopened, even though no row changed.
+     */
+    fun observeComebackDue(now: () -> Long = clock): Flow<Boolean> =
+        db.proofDao().observeAll().map { proofs ->
+            val lastProofAt = proofs.maxOfOrNull { it.capturedAtWall } ?: return@map false
+            now() - lastProofAt >= COMEBACK_DARK_MS
+        }
+
+    /**
      * Accrual happens HERE, at write time, before the purge can ever see the row.
      *
      * A count is not a memory: he may say "forty-one", he may not say "that Tuesday in March". If
@@ -368,8 +392,26 @@ class CoachRepository(
         /** Widest window any brain gate reads: AUDITED's 56 days, plus room for the repair window. */
         const val MAX_WINDOW_DAYS = 90L
         const val ROLLING_WINDOW_DAYS = 28L
+
+        /** SPEC §4.6: four dark days is a comeback, not a lapse. */
+        const val COMEBACK_DARK_MS = 4L * 86_400_000L
     }
 }
 
-/** Epoch millis -> epoch day, floored. The brain counts in days and never in milliseconds. */
-internal fun Long.toEpochDay(): Long = Math.floorDiv(this, 86_400_000L)
+/**
+ * Epoch millis -> epoch day, **in the user's local zone**. The brain counts in days and never in
+ * milliseconds.
+ *
+ * It must be *local*, and the bug it replaces is subtle and expensive. `Math.floorDiv(this,
+ * 86_400_000L)` counts days from the UTC epoch, so "today" flipped at UTC midnight — which for a user
+ * in the Americas is late afternoon and for Asia-Pacific is mid-morning. Everything the user
+ * experiences as "a day" is already local: wind-down/wake (`localMinutes`, `inWindDownWindow`) and the
+ * Archive's own frame labels (`ProofSource` uses `toLocalDate()`). The demand/compliance day must
+ * agree with them, or a habit photographed at 10am re-appears as an unmet demand that same evening the
+ * instant UTC rolls over, and graduation is scored against a day that is not the user's.
+ *
+ * `ZoneId.systemDefault()` is read at call time so a flight across zones takes effect immediately,
+ * the same instant the wind-down window it must line up with does.
+ */
+internal fun Long.toEpochDay(): Long =
+    java.time.Instant.ofEpochMilli(this).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()

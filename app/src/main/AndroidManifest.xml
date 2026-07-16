@@ -149,7 +149,7 @@
               - It is NOT exported. Nothing outside this app may ever start it.
         -->
         <activity
-            android:name=".ui.lock.LockActivity"
+            android:name=".LockActivity"
             android:exported="false"
             android:launchMode="singleInstance"
             android:taskAffinity="com.secondspine.app.lock"

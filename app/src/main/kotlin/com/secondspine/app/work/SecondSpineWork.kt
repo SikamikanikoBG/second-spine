@@ -66,6 +66,8 @@ object SecondSpineWork {
     const val EXPORT = "second_spine.export"
     const val EXPORT_NOW = "second_spine.export.now"
     const val TAPE = "second_spine.tape"
+    const val PLANNER = "second_spine.planner"
+    const val PLANNER_NOW = "second_spine.planner.now"
 
     /**
      * Wire everything up. Idempotent — call it from `Application.onCreate` on every start.
@@ -77,6 +79,24 @@ object SecondSpineWork {
     fun scheduleAll(context: Context) {
         val wm = WorkManager.getInstance(context)
         WorkNotifications.ensureChannels(context)
+
+        // ARM THE LADDER. Without this the app is silent forever: `Enforcement.arm` has no other
+        // caller, so nothing schedules the notification/vibrate/alarm/voice rungs. Daily at 05:00 —
+        // before most wake windows open — plus one immediate pass on every start so a fresh install
+        // (and anyone updating past the silent build) has today's reminder armed without opening the
+        // app. Both are idempotent per (habit, day); the immediate pass keeps at most one queued.
+        wm.enqueueUniquePeriodicWork(
+            PLANNER,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            PeriodicWorkRequestBuilder<PlannerWorker>(1, TimeUnit.DAYS)
+                .setInitialDelay(untilDaily(5, 0), TimeUnit.MILLISECONDS)
+                .build(),
+        )
+        wm.enqueueUniqueWork(
+            PLANNER_NOW,
+            ExistingWorkPolicy.KEEP,
+            OneTimeWorkRequestBuilder<PlannerWorker>().build(),
+        )
 
         wm.enqueueUniquePeriodicWork(
             PIPELINE,
