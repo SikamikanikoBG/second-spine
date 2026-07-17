@@ -17,3 +17,8 @@ keystore.properties
 !gradle/wrapper/gradle-wrapper.jar
 design/
 .kotlin/
+
+# local test artifacts (never commit)
+/shot*.png
+/verify_logs/
+local.properties

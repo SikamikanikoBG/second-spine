@@ -177,6 +177,65 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!--
+            THE LADDER'S DELIVERY COMPONENTS — and the reason the app was silent after onboarding.
+
+            Every rung and every decoy is an `AlarmManager.setAlarmClock` PendingIntent aimed
+            explicitly at `EscalationReceiver`, which starts `EscalationService`, which runs `step()`
+            and posts the notification. All three classes existed and were unit-reasoned — and NONE of
+            them were declared here. A PendingIntent to an undeclared component still *schedules*
+            (so `dumpsys alarm` shows the alarm, which is what made this look armed), but when it
+            fires the system has no registered component to deliver it to and drops it on the floor.
+            The alarm rang into a void: no receiver, no service, no notification, ever.
+
+            It was invisible for the same reason the whole ladder was: nothing ever called
+            `Enforcement.arm`, so no alarm ever fired to expose the missing declarations. Arming the
+            ladder is what turned this latent hole into the live "nothing happens" bug.
+        -->
+
+        <!--
+            The alarm receiver. Explicit-component PendingIntents only, so it needs no intent-filter —
+            but it MUST be declared. exported=false: nothing outside this app may reach it.
+        -->
+        <receiver
+            android:name=".enforce.EscalationReceiver"
+            android:exported="false" />
+
+        <!--
+            The escalation foreground service — started inside the exact-alarm temp allowlist, it runs
+            `step()` and posts the rung. `specialUse` because it is none of the typed FGS categories:
+            it is a coach claiming the next ninety seconds. On Android 14+ a specialUse FGS will not
+            start without the subtype property below, and a service that cannot start is a ladder that
+            cannot speak.
+        -->
+        <service
+            android:name=".enforce.EscalationService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="habit_reminder_escalation" />
+        </service>
+
+        <!--
+            Re-arm across reboot and app update. directBootAware so it can put the alarms back before
+            first unlock, touching only schedule.db + AlarmManager. MY_PACKAGE_REPLACED is why
+            updating the app does not silently drop every scheduled reminder. exported=true because
+            these are system broadcasts.
+        -->
+        <receiver
+            android:name=".enforce.BootReceiver"
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>
