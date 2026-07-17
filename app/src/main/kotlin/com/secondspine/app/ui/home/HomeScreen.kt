@@ -126,6 +126,17 @@ fun HomeScreen(
                 }
             }
 
+            Spacer(Modifier.height(16.dp))
+
+            // ---- 2b. RECORD — always a way in, for every habit --------------------------------
+            // Without this, the camera was reachable ONLY through the single demand card's tiny
+            // shutter: if the demand was for exercise you could not photograph water, and at the
+            // Floor there was no camera path at all — the app read as "nothing to do". A labelled
+            // button per habit means the user can proactively photograph any habit at any time, which
+            // is the plain thing "log my water/activity" means. It routes to the same `proof/{habitId}`
+            // camera the demand shutter does.
+            RecordRow(habits = state.ladder, onProof = onProof)
+
             Spacer(Modifier.height(24.dp))
 
             // ---- 3. THE LEDGER STRIP ----------------------------------------------------------
@@ -250,10 +261,65 @@ private fun FloorCard() {
             SsSectionLabel("THE FLOOR")
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Nothing is owed.",
+                text = "Nothing is owed. Record one anyway — tap a habit below.",
                 style = BodyStyle,
                 color = PaperDim,
             )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 2b. RECORD — the always-available way to photograph a habit
+// ---------------------------------------------------------------------------
+
+/**
+ * One labelled, tappable button per enabled habit, each opening the `proof/{habitId}` camera.
+ *
+ * The demand card answers "what is owed *now*"; this answers "let me record *that thing* I just did",
+ * which is the request every habit app has to satisfy and which this one had no surface for. The
+ * demand's shutter reaches the camera for exactly one habit and only while it is owed; these reach it
+ * for any habit, always. Same route, same capture, same zero-assertion bank — just a door that is
+ * actually visible and actually labelled.
+ */
+@Composable
+private fun RecordRow(
+    habits: List<LadderRow>,
+    onProof: (habitId: String) -> Unit,
+) {
+    if (habits.isEmpty()) return
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        SsSectionLabel("RECORD")
+        Spacer(Modifier.height(10.dp))
+        habits.forEach { row ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(InkRaised)
+                    .clickable { onProof(row.habitId) }
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    SsIcons.Lens,
+                    contentDescription = null,
+                    tint = Gold,
+                    modifier = Modifier.size(22.dp),
+                )
+                Spacer(Modifier.width(14.dp))
+                Text(row.habitId.uppercase(), style = LabelStyle, color = Paper)
+                Spacer(Modifier.weight(1f))
+                Text("PHOTOGRAPH", style = MonoCaptionStyle, color = PaperDim)
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    SsIcons.Shutter,
+                    contentDescription = null,
+                    tint = Gold,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.height(10.dp))
         }
     }
 }
