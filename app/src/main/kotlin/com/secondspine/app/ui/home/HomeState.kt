@@ -7,6 +7,11 @@ import com.secondspine.app.AppGraph
 import com.secondspine.app.data.Graph
 import com.secondspine.app.ui.DemandSource
 import com.secondspine.app.ui.ProofSource
+import com.secondspine.app.enforce.ChallengePlanner
+import com.secondspine.app.enforce.Enforcement
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import com.secondspine.coach.ClinicalGates
 import com.secondspine.coach.Habit
 import com.secondspine.coach.LedgerRow
@@ -183,12 +188,37 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun onResume() {
         viewModelScope.launch {
+            val app = getApplication<Application>()
+            withContext(Dispatchers.IO) {
+                // KEEP THE FIRE-TIME CONTEXT CURRENT — every app open, not only at intake.
+                //
+                // The escalation interlocks are evaluated at *fire* time from `DeviceContextReader`,
+                // which reads the boot-safe mirror in `schedule.db`. That mirror is written by
+                // `syncBootState`/`setLastAppOpenAt`, and until now those ran ONLY from the intake's
+                // terminal step. A user who UPDATED over a prior install never re-runs intake, so the
+                // mirror was never written for them: `installAt` fell back to "now" on every read,
+                // pinning the ladder in INSTALL_GRACE (R0/R1 only, never escalating), and the
+                // wind-down window fell back to 22:30/07:00 instead of theirs. Recording the open
+                // here fixes both — and it also keeps GHOSTING (which caps at R0, so it can never
+                // silence the notification, but should not fire for someone using the app) correct.
+                runCatching {
+                    val settings = Graph.settings
+                    Enforcement.setLastAppOpenAt(app, System.currentTimeMillis())
+                    Enforcement.syncBootState(
+                        context = app,
+                        installAt = settings.installAt.first(),
+                        winddownAtMinutes = settings.winddownAtMinutes.first(),
+                        wakeAtMinutes = settings.wakeAtMinutes.first(),
+                    )
+                }
+            }
+
             DemandSource.ensureTodayScheduled()
             // ARM THE LADDER for today. Opening the app is the cheapest reliable moment to make sure a
             // reminder is scheduled — idempotent per (habit, day), so this never double-arms alongside
             // the daily `PlannerWorker` or the arm at intake completion. Without a call to the planner
             // *somewhere*, `Enforcement.arm` has no caller and the app never nags.
-            com.secondspine.app.enforce.ChallengePlanner.planToday(getApplication())
+            ChallengePlanner.planToday(app)
             pulse.value = System.currentTimeMillis()
         }
     }
